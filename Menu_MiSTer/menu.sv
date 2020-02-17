@@ -49,9 +49,7 @@ module emu
 	output        VGA_VS,
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
-	output [1:0]  VGA_SL,
-
-	input  		 joy_down_i, 
+	output [1:0]  VGA_SL, 
 	
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -119,6 +117,7 @@ module emu
 	// 1 - D-/TX
 	// 2..6 - USR2..USR6
 	// Set USER_OUT to 1 to read from USER_IN.
+	output        USER_MODE,	
 	input   [6:0] USER_IN,
 	output  [6:0] USER_OUT,
 
@@ -127,7 +126,12 @@ module emu
 
 
 assign ADC_BUS  = 'Z;
-assign USER_OUT = '1;
+
+assign USER_OUT = {5'b11111,JOY_CLK,JOY_LOAD};//|status[31:30] ? {5'b11111,JOY_CLK,JOY_LOAD} : '1;
+wire JOY_CLK, JOY_LOAD;
+wire JOY_DATA = USER_IN[5];
+assign USER_MODE = 1'b1;//!|status[31:30] ;
+
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -159,14 +163,21 @@ assign LED_POWER[0]= FB ? led[2] : act_cnt2[26] ? act_cnt2[25:18] > act_cnt2[7:0
 localparam CONF_STR = {
 	"MENU;;"
 };
-/////////////////////// Joy ////////////////////////////////////
-reg [5:0] joy_db9;  // CB UDLR (negative Logic)
- 
- // CB UDLR positive logic
-assign joy_db9   = ~{USER_IN[6],USER_IN[3],USER_IN[5],joy_down_i,USER_IN[1],USER_IN[2] };
-						
 
- 
+wire [5:0] joy_raw = {joydb15_1[8]&joydb15_1[4],joydb15_1[5],joydb15_1[3:0]};
+
+reg [15:0] joydb15_1,joydb15_2;
+	joy_db15 joy_db15
+    (
+      .clk       ( act_cnt[0]), //50MHz
+      .JOY_CLK   ( JOY_CLK   ),
+      .JOY_DATA  ( JOY_DATA  ),
+      .JOY_LOAD  ( JOY_LOAD  ),
+      .joystick1 ( joydb15_1 ),
+	  .joystick2 ( joydb15_2 )	  
+    );
+
+		
 wire forced_scandoubler;
 wire  [1:0] buttons;
 wire [31:0] status;
@@ -186,7 +197,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	
 	.ps2_key(ps2_key),
 	
-	.joy_db9(joy_db9)
+	.joy_db9(joy_raw)
 );
 
 /*
